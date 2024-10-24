@@ -1,6 +1,6 @@
 import subprocess
 import os
-import re
+import webvtt
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -9,23 +9,11 @@ app = FastAPI()
 class VideoId(BaseModel):
     video_id: str
 
-def srt_to_txt(srt_content):
-    lines = srt_content.split('\n')
-    cleaned_lines = []
-    skip_next = False
-    for line in lines:
-        if skip_next:
-            skip_next = False
-            continue
-        if line.strip().isdigit():  # 跳过字幕序号
-            continue
-        if re.match(r'^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$', line):  # 跳过时间戳
-            skip_next = True  # 设置标志以跳过下一行（字幕文本）
-            continue
-        if line.strip():  # 只添加非空行
-            cleaned_lines.append(line.strip())
-    
-    return "\n".join(cleaned_lines)
+def vtt_to_txt(vtt_file_path):
+    plain_text = []
+    for caption in webvtt.read(vtt_file_path):
+        plain_text.append(caption.text.strip())
+    return '\n'.join(plain_text)
 
 @app.post("/download-subtitles/")
 async def download_subtitles(video: VideoId):
@@ -41,18 +29,16 @@ async def download_subtitles(video: VideoId):
             "--write-auto-sub",
             "--skip-download",
             "--sub-lang", "en",
-            "--sub-format", "srt",
+            "--sub-format", "vtt",
             "--output", f"{output_dir}/%(id)s.%(ext)s",
             url
         ]
         
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        subtitle_file = f"{output_dir}/{video.video_id}.en.srt"
+        subtitle_file = f"{output_dir}/{video.video_id}.en.vtt"
         if os.path.exists(subtitle_file):
-            with open(subtitle_file, 'r', encoding='utf-8') as f:
-                subtitle_content = f.read()
-            cleaned_content = srt_to_txt(subtitle_content)
+            cleaned_content = vtt_to_txt(subtitle_file)
             return {"message": "Subtitles downloaded and cleaned successfully", "content": cleaned_content}
         else:
             raise HTTPException(status_code=404, detail="Subtitle file not found")

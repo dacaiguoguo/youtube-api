@@ -1,1 +1,1 @@
-yt-dlp --username=oauth --password=""  --write-auto-sub --skip-download https://www.youtube.com/watch\?v\=-W9cztx4O3o
+yt-dlp --username=oauth --password=""  --write-auto-sub --sub-format vtt --skip-download https://www.youtube.com/watch\?v\=-W9cztx4O3o
