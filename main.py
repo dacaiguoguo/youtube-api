@@ -31,7 +31,7 @@ async def download_subtitles(video: VideoId):
         
         command = [
             "yt-dlp",
-            "--username=oauth",
+            "--username=oauth+MY_PROFILE",
             "--password=",
             "--write-auto-sub",
             "--skip-download",
