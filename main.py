@@ -9,19 +9,23 @@ app = FastAPI()
 class VideoId(BaseModel):
     video_id: str
 
-def clean_vtt_content(vtt_content):
-    # Remove all lines that start with numbers (timestamps)
-    lines = vtt_content.split('\n')
-    cleaned_lines = [line for line in lines if not re.match(r'^\d', line.strip())]
+def srt_to_txt(srt_content):
+    lines = srt_content.split('\n')
+    cleaned_lines = []
+    skip_next = False
+    for line in lines:
+        if skip_next:
+            skip_next = False
+            continue
+        if line.strip().isdigit():  # 跳过字幕序号
+            continue
+        if re.match(r'^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$', line):  # 跳过时间戳
+            skip_next = True  # 设置标志以跳过下一行（字幕文本）
+            continue
+        if line.strip():  # 只添加非空行
+            cleaned_lines.append(line.strip())
     
-    # Remove all lines that contain ' --> ' (timestamp separators)
-    cleaned_lines = [line for line in cleaned_lines if ' --> ' not in line]
-    
-    # Remove WEBVTT header and empty lines
-    cleaned_lines = [line for line in cleaned_lines if line.strip() and not line.startswith('WEBVTT')]
-    
-    # Join the remaining lines
-    return '\n'.join(cleaned_lines).strip()
+    return "\n".join(cleaned_lines)
 
 @app.post("/download-subtitles/")
 async def download_subtitles(video: VideoId):
@@ -37,17 +41,18 @@ async def download_subtitles(video: VideoId):
             "--write-auto-sub",
             "--skip-download",
             "--sub-lang", "en",
+            "--sub-format", "srt",
             "--output", f"{output_dir}/%(id)s.%(ext)s",
             url
         ]
         
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        subtitle_file = f"{output_dir}/{video.video_id}.en.vtt"
+        subtitle_file = f"{output_dir}/{video.video_id}.en.srt"
         if os.path.exists(subtitle_file):
             with open(subtitle_file, 'r', encoding='utf-8') as f:
                 subtitle_content = f.read()
-            cleaned_content = clean_vtt_content(subtitle_content)
+            cleaned_content = srt_to_txt(subtitle_content)
             return {"message": "Subtitles downloaded and cleaned successfully", "content": cleaned_content}
         else:
             raise HTTPException(status_code=404, detail="Subtitle file not found")
