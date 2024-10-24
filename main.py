@@ -43,7 +43,9 @@ async def download_subtitles(video: VideoId):
         
         logger.info("Executing yt-dlp command")
         result = subprocess.run(command, capture_output=True, text=True, check=True)
-        logger.info("yt-dlp command executed successfully")
+        logger.info(f"yt-dlp command executed successfully. Return code: {result.returncode}")
+        logger.debug(f"yt-dlp stdout: {result.stdout}")
+        logger.debug(f"yt-dlp stderr: {result.stderr}")
         
         subtitle_file = f"{output_dir}/{video.video_id}.en.vtt"
         if os.path.exists(subtitle_file):
