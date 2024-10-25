@@ -43,6 +43,7 @@ def get_video_details(video_id):
         content_details = video_info['contentDetails']
 
         return {
+            
             "title": snippet['title'],
             "description": snippet['description'],
             "channelTitle": snippet['channelTitle'],
@@ -116,13 +117,15 @@ async def download_subtitles(video: VideoId):
                 return {
                     "message": "Subtitles downloaded and cleaned successfully",
                     "content": cleaned_content,
-                    "video_details": video_details
+                    "video_details": video_details,
+                    "video_id": video.video_id  # Added video_id to the response
                 }
             else:
                 logger.warning("Video details not found")
                 return {
                     "message": "Subtitles downloaded and cleaned successfully, but video details not found",
-                    "content": cleaned_content
+                    "content": cleaned_content,
+                    "video_id": video.video_id  # Added video_id to the response
                 }
         else:
             logger.warning("Subtitle file not found")
@@ -130,7 +133,8 @@ async def download_subtitles(video: VideoId):
                 logger.info("Video details fetched successfully")
                 return {
                     "message": "Subtitles not found, but video details fetched successfully",
-                    "video_details": video_details
+                    "video_details": video_details,
+                    "video_id": video.video_id  # Added video_id to the response
                 }
             else:
                 logger.error("Neither subtitles nor video details found")
