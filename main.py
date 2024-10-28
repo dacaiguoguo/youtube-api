@@ -57,6 +57,12 @@ def get_video_details(video_id):
     else:
         return None
 
+def validate_youtube_id(video_id):
+    # 简单验证YouTube ID的格式（通常是11个字符）
+    if not video_id or len(video_id) != 11:
+        return False
+    return True
+
 async def download_subtitles_async(video_id, output_dir):
     url = f"https://www.youtube.com/watch?v={video_id}"
     command = [
@@ -94,6 +100,19 @@ async def get_video_details_async(video_id):
 @app.post("/download-subtitles/")
 async def download_subtitles(video: VideoId):
     logger.info(f"Received request for video ID: {video.video_id}")
+    
+    # 添加ID验证
+    if not validate_youtube_id(video.video_id):
+        logger.error(f"Invalid YouTube video ID: {video.video_id}")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_type": "invalid_video_id",
+                "message": "Invalid YouTube video ID format",
+                "video_id": video.video_id
+            }
+        )
+    
     try:
         output_dir = f"subtitles/{video.video_id}"
         os.makedirs(output_dir, exist_ok=True)
@@ -144,9 +163,26 @@ async def download_subtitles(video: VideoId):
                 logger.error("Neither subtitles nor video details found")
                 raise HTTPException(status_code=404, detail="Neither subtitles nor video details found")
 
+    except subprocess.CalledProcessError as e:
+        logger.error(f"yt-dlp execution error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_type": "youtube_dl_error",
+                "message": f"Error downloading subtitles: {str(e)}",
+                "video_id": video.video_id
+            }
+        )
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_type": "general_error",
+                "message": f"Error processing request: {str(e)}",
+                "video_id": video.video_id
+            }
+        )
 
 if __name__ == "__main__":
     import uvicorn
