@@ -101,15 +101,20 @@ async def get_video_details_async(video_id):
 async def download_subtitles(video: VideoId):
     logger.info(f"Received request for video ID: {video.video_id}")
     
-    # 添加ID验证
     if not validate_youtube_id(video.video_id):
         logger.error(f"Invalid YouTube video ID: {video.video_id}")
         raise HTTPException(
             status_code=400,
             detail={
-                "error_type": "invalid_video_id",
-                "message": "Invalid YouTube video ID format",
-                "video_id": video.video_id
+                "status": "error",
+                "detail": {
+                    "error_type": "invalid_video_id",
+                    "message": "Invalid YouTube video ID format"
+                },
+                "data": {
+                    "video_id": video.video_id,
+                    "video_url": video.video_url
+                }
             }
         )
     
@@ -118,7 +123,6 @@ async def download_subtitles(video: VideoId):
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Created output directory: {output_dir}")
         
-        # 并行执行字幕下载和获取视频详情
         subtitle_task = asyncio.create_task(download_subtitles_async(video.video_id, output_dir))
         video_details_task = asyncio.create_task(get_video_details_async(video.video_id))
         
@@ -132,45 +136,46 @@ async def download_subtitles(video: VideoId):
             cleaned_content = vtt_to_txt(subtitle_file)
             logger.info("Subtitles cleaned successfully")
             
-            if video_details:
-                logger.info("Video details fetched successfully")
-                return {
-                    "message": "Subtitles downloaded and cleaned successfully",
+            return {
+                "status": "success",
+                "detail": {
+                    "message": "Subtitles downloaded and cleaned successfully"
+                },
+                "data": {
                     "content": cleaned_content,
                     "video_details": video_details,
                     "video_id": video.video_id,
-                    "video_url": video.video_url  # 在返回值中添加 video_url
+                    "video_url": video.video_url
                 }
-            else:
-                logger.warning("Video details not found")
-                return {
-                    "message": "Subtitles downloaded and cleaned successfully, but video details not found",
-                    "content": cleaned_content,
-                    "video_id": video.video_id,
-                    "video_url": video.video_url  # 在返回值中添加 video_url
-                }
+            }
         else:
             logger.warning("Subtitle file not found")
-            if video_details:
-                logger.info("Video details fetched successfully")
-                return {
-                    "message": "Subtitles not found, but video details fetched successfully",
-                    "video_details": video_details,
+            return {
+                "status": "success",
+                "detail": {
+                    "message": "Subtitles not found, but video details fetched successfully" if video_details else "Neither subtitles nor video details found"
+                },
+                "data": {
+                    "video_details": video_details if video_details else {},
                     "video_id": video.video_id,
-                    "video_url": video.video_url  # 在返回值中添加 video_url
+                    "video_url": video.video_url
                 }
-            else:
-                logger.error("Neither subtitles nor video details found")
-                raise HTTPException(status_code=404, detail="Neither subtitles nor video details found")
+            }
 
     except subprocess.CalledProcessError as e:
         logger.error(f"yt-dlp execution error: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail={
-                "error_type": "youtube_dl_error",
-                "message": f"Error downloading subtitles: {str(e)}",
-                "video_id": video.video_id
+                "status": "error",
+                "detail": {
+                    "error_type": "youtube_dl_error",
+                    "message": f"Error downloading subtitles: {str(e)}"
+                },
+                "data": {
+                    "video_id": video.video_id,
+                    "video_url": video.video_url
+                }
             }
         )
     except Exception as e:
@@ -178,11 +183,18 @@ async def download_subtitles(video: VideoId):
         raise HTTPException(
             status_code=500,
             detail={
-                "error_type": "general_error",
-                "message": f"Error processing request: {str(e)}",
-                "video_id": video.video_id
+                "status": "error",
+                "detail": {
+                    "error_type": "general_error",
+                    "message": f"Error processing request: {str(e)}"
+                },
+                "data": {
+                    "video_id": video.video_id,
+                    "video_url": video.video_url
+                }
             }
         )
+
 
 if __name__ == "__main__":
     import uvicorn
