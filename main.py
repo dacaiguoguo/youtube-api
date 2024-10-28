@@ -15,6 +15,7 @@ app = FastAPI()
 
 class VideoId(BaseModel):
     video_id: str
+    video_url: str  # 新增 video_url 字段
 
 # 从环境变量中读取 API 密钥
 API_KEY = os.environ.get('YOUTUBE_API_KEY')
@@ -118,14 +119,16 @@ async def download_subtitles(video: VideoId):
                     "message": "Subtitles downloaded and cleaned successfully",
                     "content": cleaned_content,
                     "video_details": video_details,
-                    "video_id": video.video_id  # Added video_id to the response
+                    "video_id": video.video_id,
+                    "video_url": video.video_url  # 在返回值中添加 video_url
                 }
             else:
                 logger.warning("Video details not found")
                 return {
                     "message": "Subtitles downloaded and cleaned successfully, but video details not found",
                     "content": cleaned_content,
-                    "video_id": video.video_id  # Added video_id to the response
+                    "video_id": video.video_id,
+                    "video_url": video.video_url  # 在返回值中添加 video_url
                 }
         else:
             logger.warning("Subtitle file not found")
@@ -134,7 +137,8 @@ async def download_subtitles(video: VideoId):
                 return {
                     "message": "Subtitles not found, but video details fetched successfully",
                     "video_details": video_details,
-                    "video_id": video.video_id  # Added video_id to the response
+                    "video_id": video.video_id,
+                    "video_url": video.video_url  # 在返回值中添加 video_url
                 }
             else:
                 logger.error("Neither subtitles nor video details found")
