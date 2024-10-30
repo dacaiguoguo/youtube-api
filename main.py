@@ -4,8 +4,9 @@ import subprocess
 import os
 import webvtt
 import logging
-from pydantic import BaseModel
-from googleapiclient.discovery import build
+from pydantic import BaseModel, HttpUrl
+import requests
+from bs4 import BeautifulSoup
 
 # 设置日志配置
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,6 +17,9 @@ app = FastAPI()
 class VideoId(BaseModel):
     video_id: str
     video_url: str
+
+class WebUrl(BaseModel):
+    url: HttpUrl
 
 # 从环境变量中读取 API 密钥
 API_KEY = os.environ.get('YOUTUBE_API_KEY')
@@ -179,7 +183,63 @@ async def download_subtitles(video: VideoId):
             }
         )
 
-
+@app.post("/fetch-webpage/")
+async def fetch_webpage(web_url: WebUrl):
+    logger.info(f"Received request to fetch URL: {web_url.url}")
+    
+    try:
+        # 发送GET请求获取网页内容
+        response = requests.get(str(web_url.url), timeout=10)
+        response.raise_for_status()
+        
+        # 使用BeautifulSoup解析网页
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 移除所有script和style标签
+        for script in soup(["script", "style"]):
+            script.decompose()
+            
+        # 获取文本内容
+        text = soup.get_text()
+        
+        # 清理文本（删除多余的空白行和空格）
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = '\n'.join(chunk for chunk in chunks if chunk)
+        
+        return {
+            "detail": {
+                "status": "success",
+                "message": "Webpage content fetched successfully",
+                "data": {
+                    "content": text,
+                    "url": str(web_url.url)
+                }
+            }
+        }
+        
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": f"Error fetching webpage: {str(e)}",
+                "data": {
+                    "url": str(web_url.url)
+                }
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": f"Error processing request: {str(e)}",
+                "data": {
+                    "url": str(web_url.url)
+                }
+            }
+        )
 
 if __name__ == "__main__":
     import uvicorn
