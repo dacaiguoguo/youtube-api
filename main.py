@@ -7,6 +7,7 @@ import logging
 from pydantic import BaseModel, HttpUrl
 import requests
 from bs4 import BeautifulSoup
+from googleapiclient.discovery import build
 
 # 设置日志配置
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
