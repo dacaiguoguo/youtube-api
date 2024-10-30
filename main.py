@@ -8,6 +8,10 @@ from pydantic import BaseModel, HttpUrl
 import requests
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
+from time import sleep
+from random import uniform
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 # 设置日志配置
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -102,6 +106,17 @@ async def get_video_details_async(video_id):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, get_video_details, video_id)
 
+def create_session_with_retries():
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504]
+    )
+    session.mount('http://', HTTPAdapter(max_retries=retries))
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+    return session
+
 @app.post("/download-subtitles/")
 async def download_subtitles(video: VideoId):
     logger.info(f"Received request for video ID: {video.video_id}")
@@ -188,9 +203,25 @@ async def download_subtitles(video: VideoId):
 async def fetch_webpage(web_url: WebUrl):
     logger.info(f"Received request to fetch URL: {web_url.url}")
     
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+    }
+    
     try:
+        # 创建带有重试机制的会话
+        session = create_session_with_retries()
+        
+        # 添加随机延迟
+        sleep(uniform(0.1, 1.0))
+        
         # 发送GET请求获取网页内容
-        response = requests.get(str(web_url.url), timeout=10)
+        response = session.get(
+            str(web_url.url),
+            headers=headers,
+            timeout=15
+        )
         response.raise_for_status()
         
         # 使用BeautifulSoup解析网页
