@@ -3,6 +3,9 @@ import asyncio
 import subprocess
 import os
 import webvtt
+from cachetools import TTLCache
+import json
+from datetime import timedelta
 import logging
 from pydantic import BaseModel, HttpUrl
 import requests
@@ -116,6 +119,9 @@ def create_session_with_retries():
     session.mount('https://', HTTPAdapter(max_retries=retries))
     return session
 
+# 创建一个TTL缓存，最多存储1000个项目，每个缓存项保存1天
+subtitle_cache = TTLCache(maxsize=1000, ttl=86400)
+
 @app.post("/download-subtitles/")
 async def download_subtitles(video: VideoId):
     logger.info(f"Received request for video ID: {video.video_id}")
@@ -132,7 +138,14 @@ async def download_subtitles(video: VideoId):
                 }
             }
         )
-    
+
+    # 检查缓存
+    cache_key = f"subtitles_{video.video_id}"
+    if cache_key in subtitle_cache:
+        logger.info(f"Cache hit for video ID: {video.video_id}")
+        return subtitle_cache[cache_key]
+
+    # 如果缓存中没有，执行原来的下载逻辑
     try:
         output_dir = f"subtitles/{video.video_id}"
         os.makedirs(output_dir, exist_ok=True)
@@ -148,18 +161,20 @@ async def download_subtitles(video: VideoId):
         if os.path.exists(subtitle_file):
             cleaned_content = vtt_to_txt(subtitle_file)
             
-            return {
+            # 将结果存入缓存
+            response_data = {
                 "detail": {
                     "status": "success",
                     "message": "Subtitles downloaded and cleaned successfully",
                     "data": {
-                        "content": cleaned_content,
-                        "video_details": video_details,
                         "video_id": video.video_id,
-                        "video_url": video.video_url
+                        "video_url": video.video_url,
+                        "subtitles": cleaned_content
                     }
                 }
             }
+            subtitle_cache[cache_key] = response_data
+            return response_data
         else:
             return {
                 "detail": {
