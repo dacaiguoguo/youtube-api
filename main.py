@@ -72,8 +72,7 @@ async def download_subtitles_async(video_id, output_dir):
     url = f"https://www.youtube.com/watch?v={video_id}"
     command = [
         "yt-dlp",
-        "--username=oauth+MY_PROFILE",
-        "--password=",
+        "--cookies","/opt/youtube-api/cookies.txt"
         "--write-auto-sub",
         "--skip-download",
         "--sub-lang", "en",
