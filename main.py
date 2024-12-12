@@ -85,7 +85,6 @@ async def download_subtitles_async(video_id, output_dir):
         "--cookies", "/opt/youtube-api/cookies.txt",
         "--write-auto-sub",
         "--skip-download",
-        "--sub-lang", "en",
         "--sub-format", "vtt",
         "--output", output_file,
         url
@@ -154,7 +153,7 @@ async def download_subtitles(video: VideoId):
 
     # 如果缓存中没有，执行原来的下载逻辑
     try:
-        output_dir = os.path.join("downloads", video.video_id)
+        output_dir = "downloads"
         os.makedirs(output_dir, exist_ok=True)
         
         subtitle_task = asyncio.create_task(download_subtitles_async(video.video_id, output_dir))
@@ -163,6 +162,7 @@ async def download_subtitles(video: VideoId):
         await asyncio.gather(subtitle_task, video_details_task)
         
         subtitle_file = os.path.join(output_dir, f"{video.video_id}.vtt")
+
         video_details = await video_details_task
 
         if os.path.exists(subtitle_file):
