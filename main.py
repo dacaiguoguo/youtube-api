@@ -72,6 +72,13 @@ def validate_youtube_id(video_id):
     return bool(video_id) and len(video_id) == 11
 
 async def download_subtitles_async(video_id, output_dir):
+    output_file = os.path.join(output_dir, f"{video_id}.vtt")
+    
+    # 如果文件已存在，直接返回
+    if os.path.exists(output_file):
+        logger.info(f"Subtitle file already exists: {output_file}")
+        return
+        
     url = f"https://www.youtube.com/watch?v={video_id}"
     command = [
         "yt-dlp",
@@ -80,11 +87,11 @@ async def download_subtitles_async(video_id, output_dir):
         "--skip-download",
         "--sub-lang", "en",
         "--sub-format", "vtt",
-        "--output", f"{output_dir}/%(id)s.%(ext)s",
+        "--output", output_file,
         url
     ]
     
-    logger.info("Executing yt-dlp command")
+    logger.info(f"Executing yt-dlp command: {' '.join(command)}")
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
@@ -147,7 +154,7 @@ async def download_subtitles(video: VideoId):
 
     # 如果缓存中没有，执行原来的下载逻辑
     try:
-        output_dir = f"subtitles/{video.video_id}"
+        output_dir = os.path.join("downloads", video.video_id)
         os.makedirs(output_dir, exist_ok=True)
         
         subtitle_task = asyncio.create_task(download_subtitles_async(video.video_id, output_dir))
@@ -155,7 +162,7 @@ async def download_subtitles(video: VideoId):
         
         await asyncio.gather(subtitle_task, video_details_task)
         
-        subtitle_file = f"{output_dir}/{video.video_id}.en.vtt"
+        subtitle_file = os.path.join(output_dir, f"{video.video_id}.vtt")
         video_details = await video_details_task
 
         if os.path.exists(subtitle_file):
