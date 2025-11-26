@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 import asyncio
 import subprocess
 import os
+import sys
+import platform
 import webvtt
 from cachetools import TTLCache
 import json
@@ -21,6 +23,42 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# 根据操作系统确定 yt-dlp 和 deno 路径
+def get_ytdlp_and_deno_paths():
+    system = platform.system()
+
+    if system == 'Darwin':  # macOS
+        ytdlp_path = '/opt/homebrew/bin/yt-dlp'
+        deno_path = os.path.expanduser('~/.deno/bin/deno')
+    elif system == 'Linux':
+        # 检查当前用户
+        username = os.getenv('USER', 'root')
+        if username == 'webui':
+            ytdlp_path = os.path.expanduser('~/.local/bin/yt-dlp')
+            deno_path = os.path.expanduser('~/.deno/bin/deno')
+        elif username == 'root':
+            ytdlp_path = '/usr/local/bin/yt-dlp'
+            deno_path = '/root/.deno/bin/deno'
+        else:
+            ytdlp_path = '/usr/bin/yt-dlp'
+            deno_path = os.path.expanduser('~/.deno/bin/deno')
+    else:
+        ytdlp_path = 'yt-dlp'
+        deno_path = 'deno'
+
+    # 检查路径是否存在，如果不存在则使用默认命令
+    if not os.path.exists(ytdlp_path):
+        ytdlp_path = 'yt-dlp'
+    if not os.path.exists(deno_path):
+        deno_path = 'deno'
+
+    logger.info(f"使用 yt-dlp 路径: {ytdlp_path}")
+    logger.info(f"使用 deno 路径: {deno_path}")
+
+    return ytdlp_path, deno_path
+
+YT_DLP_PATH, DENO_PATH = get_ytdlp_and_deno_paths()
 
 class VideoId(BaseModel):
     video_id: str
@@ -83,12 +121,14 @@ async def download_subtitles_async(video_id, output_dir, max_retries=3):
     output_template = os.path.join(output_dir, f"{video_id}")
 
     command = [
-        "yt-dlp",
+        YT_DLP_PATH,
         "--cookies", "cookies.txt",
         "--write-auto-sub",
         "--sub-format", "vtt",
         "--skip-download",
         "--output", output_template,
+        "--extractor-args", f"youtube:player_client=web;jsruntimes={DENO_PATH}",
+        "--remote-components", "ejs:github",
         url
     ]
 
@@ -106,9 +146,15 @@ async def download_subtitles_async(video_id, output_dir, max_retries=3):
             stderr_text = stderr.decode()
             stdout_text = stdout.decode()
 
-            # 检查是否成功（即使有警告，只要字幕下载成功就算成功）
-            if "Writing video subtitles" in stderr_text or process.returncode == 0:
-                logger.info("yt-dlp command executed successfully")
+            # 检查是否成功下载字幕（即使视频格式不可用，只要字幕下载成功就算成功）
+            subtitle_downloaded = (
+                "Writing video subtitles" in stderr_text or
+                "Destination:" in stderr_text and ".vtt" in stderr_text or
+                process.returncode == 0
+            )
+
+            if subtitle_downloaded:
+                logger.info("yt-dlp subtitle download completed")
                 logger.debug(f"yt-dlp stdout: {stdout_text}")
                 if stderr_text:
                     logger.debug(f"yt-dlp stderr: {stderr_text}")
@@ -116,6 +162,15 @@ async def download_subtitles_async(video_id, output_dir, max_retries=3):
 
             if process.returncode != 0:
                 logger.error(f"Error executing yt-dlp (returncode={process.returncode}): {stderr_text}")
+
+                # 检查是否只是格式不可用错误（但字幕可能已下载）
+                if "Requested format is not available" in stderr_text and "--skip-download" in ' '.join(command):
+                    logger.warning("Video format not available, but we only need subtitles anyway")
+                    # 检查字幕文件是否已生成
+                    subtitle_files = [f for f in os.listdir(output_dir) if f.startswith(f"{video_id}.") and f.endswith('.vtt')]
+                    if subtitle_files:
+                        logger.info(f"Subtitle file found: {subtitle_files[0]}")
+                        return
 
                 # 检查是否是速率限制错误
                 if "429" in stderr_text or "Too Many Requests" in stderr_text:
