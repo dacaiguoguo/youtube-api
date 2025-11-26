@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(uvicorn:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs ps:*)",
+      "Bash(python3.10 -m pip install:*)",
+      "Bash(export YOUTUBE_API_KEY=\"dummy_key_for_testing\")",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(export YOUTUBE_API_KEY=\"AIzaSyDVnUGDoUdL1faL1vaiLkLFbBDktuT4Fbo\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,1 +1,1 @@
-yt-dlp --username=oauth+MY_PROFILE --password=""  --write-auto-sub --sub-format vtt --skip-download https://www.youtube.com/watch\?v\=-W9cztx4O3o
+yt-dlp --cookies cookies.txt --write-auto-sub --sub-format vtt --skip-download https://www.youtube.com/watch?v=-W9cztx4O3o

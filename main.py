@@ -71,44 +71,70 @@ def get_video_details(video_id):
 def validate_youtube_id(video_id):
     return bool(video_id) and len(video_id) == 11
 
-async def download_subtitles_async(video_id, output_dir):
+async def download_subtitles_async(video_id, output_dir, max_retries=3):
     output_file = os.path.join(output_dir, f"{video_id}.vtt")
-    
+
     # 如果文件已存在，直接返回
     if os.path.exists(output_file):
         logger.info(f"Subtitle file already exists: {output_file}")
         return
-        
+
     url = f"https://www.youtube.com/watch?v={video_id}"
     command = [
         "yt-dlp",
-        "--cookies", "/opt/youtube-api/cookies.txt",
+        "--cookies", "cookies.txt",
         "--write-auto-sub",
         "--skip-download",
         "--sub-format", "vtt",
         "--output", output_file,
         url
     ]
-    
-    logger.info(f"Executing yt-dlp command: {' '.join(command)}")
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
-    
-    if process.returncode != 0:
-        logger.error(f"Error executing yt-dlp: {stderr.decode()}")
-        raise HTTPException(status_code=500, detail={
-            "status": "error",
-            "error_type": "yt_dlp_error",
-            "message": f"Error executing yt-dlp: {stderr.decode()}"
-        })
-    
-    logger.info("yt-dlp command executed successfully")
-    logger.debug(f"yt-dlp stdout: {stdout.decode()}")
-    logger.debug(f"yt-dlp stderr: {stderr.decode()}")
+
+    # 重试逻辑
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Executing yt-dlp command (attempt {attempt + 1}/{max_retries}): {' '.join(command)}")
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                error_msg = stderr.decode()
+                logger.error(f"Error executing yt-dlp: {error_msg}")
+
+                # 检查是否是速率限制错误
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 5  # 5, 10, 15 seconds
+                        logger.info(f"Rate limited. Waiting {wait_time} seconds before retry...")
+                        await asyncio.sleep(wait_time)
+                        continue
+
+                raise HTTPException(status_code=500, detail={
+                    "status": "error",
+                    "error_type": "yt_dlp_error",
+                    "message": f"Error executing yt-dlp: {error_msg}"
+                })
+
+            logger.info("yt-dlp command executed successfully")
+            logger.debug(f"yt-dlp stdout: {stdout.decode()}")
+            logger.debug(f"yt-dlp stderr: {stderr.decode()}")
+            return
+
+        except HTTPException:
+            if attempt == max_retries - 1:
+                raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            if attempt == max_retries - 1:
+                raise HTTPException(status_code=500, detail={
+                    "status": "error",
+                    "error_type": "unexpected_error",
+                    "message": str(e)
+                })
 
 async def get_video_details_async(video_id):
     loop = asyncio.get_event_loop()
