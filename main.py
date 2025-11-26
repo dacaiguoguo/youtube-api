@@ -72,21 +72,23 @@ def validate_youtube_id(video_id):
     return bool(video_id) and len(video_id) == 11
 
 async def download_subtitles_async(video_id, output_dir, max_retries=3):
-    output_file = os.path.join(output_dir, f"{video_id}.vtt")
-
-    # 如果文件已存在，直接返回
-    if os.path.exists(output_file):
-        logger.info(f"Subtitle file already exists: {output_file}")
-        return
+    # 检查是否已存在字幕文件（可能有不同的语言后缀）
+    if os.path.exists(output_dir):
+        existing_files = [f for f in os.listdir(output_dir) if f.startswith(f"{video_id}.") and f.endswith('.vtt')]
+        if existing_files:
+            logger.info(f"Subtitle file already exists: {existing_files[0]}")
+            return
 
     url = f"https://www.youtube.com/watch?v={video_id}"
+    output_template = os.path.join(output_dir, f"{video_id}")
+
     command = [
         "yt-dlp",
         "--cookies", "cookies.txt",
         "--write-auto-sub",
-        "--skip-download",
         "--sub-format", "vtt",
-        "--output", output_file,
+        "--skip-download",
+        "--output", output_template,
         url
     ]
 
@@ -101,14 +103,24 @@ async def download_subtitles_async(video_id, output_dir, max_retries=3):
             )
             stdout, stderr = await process.communicate()
 
+            stderr_text = stderr.decode()
+            stdout_text = stdout.decode()
+
+            # 检查是否成功（即使有警告，只要字幕下载成功就算成功）
+            if "Writing video subtitles" in stderr_text or process.returncode == 0:
+                logger.info("yt-dlp command executed successfully")
+                logger.debug(f"yt-dlp stdout: {stdout_text}")
+                if stderr_text:
+                    logger.debug(f"yt-dlp stderr: {stderr_text}")
+                return
+
             if process.returncode != 0:
-                error_msg = stderr.decode()
-                logger.error(f"Error executing yt-dlp: {error_msg}")
+                logger.error(f"Error executing yt-dlp (returncode={process.returncode}): {stderr_text}")
 
                 # 检查是否是速率限制错误
-                if "429" in error_msg or "Too Many Requests" in error_msg:
+                if "429" in stderr_text or "Too Many Requests" in stderr_text:
                     if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 5  # 5, 10, 15 seconds
+                        wait_time = (attempt + 1) * 10  # 10, 20, 30 seconds
                         logger.info(f"Rate limited. Waiting {wait_time} seconds before retry...")
                         await asyncio.sleep(wait_time)
                         continue
@@ -116,12 +128,9 @@ async def download_subtitles_async(video_id, output_dir, max_retries=3):
                 raise HTTPException(status_code=500, detail={
                     "status": "error",
                     "error_type": "yt_dlp_error",
-                    "message": f"Error executing yt-dlp: {error_msg}"
+                    "message": f"Error executing yt-dlp: {stderr_text}"
                 })
 
-            logger.info("yt-dlp command executed successfully")
-            logger.debug(f"yt-dlp stdout: {stdout.decode()}")
-            logger.debug(f"yt-dlp stderr: {stderr.decode()}")
             return
 
         except HTTPException:
